@@ -1,3 +1,7 @@
+"""
+python video-manipulation/preprocess/preprocess_video.py --input videos/00376.mp4 --output optical_flows --visualize
+"""
+
 import argparse
 import os
 import sys
