@@ -2,8 +2,7 @@
 
 ## Installation
 
-This installation guide is based on the DMesh repository (https://github.com/SonSang/dmesh).
-This guide is written for Ubuntu/Linux environment. Please ensure you have Python 3.9 and recommend using Anaconda to manage the environment.
+This installation guide is based on the DMesh repository (https://github.com/SonSang/dmesh). Please ensure you have Python 3.9 and recommend using Anaconda to manage the environment.
 
 ### Prerequisites
 
@@ -53,3 +52,16 @@ Install other required Python packages:
 ```bash
 pip install -r requirements.txt
 ```
+
+## Dataset
+
+### Download PhysDreamer Dataset
+
+The PhysDreamer dataset is available on Hugging Face. You can download it using one of the following methods:
+
+#### Direct Download
+
+You can also download the dataset files directly from the [Hugging Face dataset page](https://huggingface.co/datasets/YunjinZhang/PhysDreamer/tree/main):
+- `physics_dreamer.zip` (7.52 GB) - Contains images and 3D Gaussians for scenes: alocasia, carnation, telephone, hat
+
+After downloading, extract the files to your desired data directory.
