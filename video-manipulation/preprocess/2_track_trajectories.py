@@ -24,6 +24,7 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import gc
 
 
 def load_flow_files(flow_dir):
@@ -70,69 +71,41 @@ def compute_flow_magnitude(flows):
     return magnitude  # Shape: (T, H, W)
 
 
-def track_pixel_trajectories(args,flows, initial_positions=None, sample_grid=None, 
+def track_pixel_trajectories(args, flows, initial_positions=None, sample_grid=None, 
                             use_flow_magnitude=False, magnitude_threshold=0.5, max_points=1000):
     """
-    Track pixel trajectories by integrating optical flow over time.
-    
-    Args:
-        flows: numpy array of shape (T, H, W, 2) or list of flow tensors
-        initial_positions: array of shape (N, 2) with initial [y, x] positions
-        sample_grid: tuple (grid_h, grid_w) to sample points uniformly
-        use_flow_magnitude: If True, select initial points based on flow magnitude in first frame
-        magnitude_threshold: Minimum flow magnitude to consider (in pixels)
-        max_points: Maximum number of points to track when using flow magnitude
-    
-    Returns:
-        trajectories: array of shape (N, T+1, 2) containing [y, x] positions over time
-        initial_positions: array of shape (N, 2) with starting positions
+    Vectorized tracking of pixel trajectories. 
+    Speeds up processing by updating all N points simultaneously using numpy operations.
     """
     if isinstance(flows, list):
         flows = flow_to_numpy(flows)
     
     T, H, W, _ = flows.shape
     
-    # Create initial positions if not provided
+    # --- Initialization Logic (Same as before) ---
     if initial_positions is None:
         if use_flow_magnitude:
-            # Select points based on flow magnitude in first frame
-            first_flow = flows[0]  # Shape: (H, W, 2)
+            first_flow = flows[0]
             magnitude = np.sqrt(first_flow[:, :, 0]**2 + first_flow[:, :, 1]**2)
-            
-            # Find pixels above threshold
             mask = magnitude > magnitude_threshold
             y_coords, x_coords = np.where(mask)
             
             if len(y_coords) == 0:
-                print(f"Warning: No pixels with magnitude > {magnitude_threshold}. Using lower threshold.")
-                magnitude_threshold = np.percentile(magnitude, 50)  # Use median
+                print(f"Warning: No pixels with magnitude > {magnitude_threshold}. Using median.")
+                magnitude_threshold = np.percentile(magnitude, 50)
                 mask = magnitude > magnitude_threshold
                 y_coords, x_coords = np.where(mask)
             
-            print(len(y_coords), "pixels found with magnitude >", magnitude_threshold)
-            # If too many points, sample based on magnitude
             if len(y_coords) > max_points and args.allow_sampling:
-                # Sample points weighted by magnitude
                 magnitudes_at_points = magnitude[y_coords, x_coords]
                 probabilities = magnitudes_at_points / magnitudes_at_points.sum()
-                selected_indices = np.random.choice(
-                    len(y_coords), 
-                    size=max_points, 
-                    replace=False,
-                    p=probabilities
-                )
+                selected_indices = np.random.choice(len(y_coords), size=max_points, replace=False, p=probabilities)
                 y_coords = y_coords[selected_indices]
                 x_coords = x_coords[selected_indices]
             
             initial_positions = np.stack([y_coords, x_coords], axis=1).astype(float)
-            print(f"Selected {len(initial_positions)} points with flow magnitude > {magnitude_threshold:.2f}")
-            print(f"  Mean magnitude: {magnitude[y_coords, x_coords].mean():.2f} pixels")
-            print(f"  Max magnitude: {magnitude[y_coords, x_coords].max():.2f} pixels")
         else:
-            # Use uniform grid sampling
-            if sample_grid is None:
-                sample_grid = (10, 10)  # Default 10x10 grid
-            
+            if sample_grid is None: sample_grid = (10, 10)
             grid_h, grid_w = sample_grid
             y_coords = np.linspace(H // (2 * grid_h), H - H // (2 * grid_h), grid_h)
             x_coords = np.linspace(W // (2 * grid_w), W - W // (2 * grid_w), grid_w)
@@ -140,43 +113,71 @@ def track_pixel_trajectories(args,flows, initial_positions=None, sample_grid=Non
             initial_positions = np.stack([yy.ravel(), xx.ravel()], axis=1)
     
     N = len(initial_positions)
-    trajectories = np.zeros((N, T + 1, 2))  # +1 for initial position
+    trajectories = np.zeros((N, T + 1, 2))
     trajectories[:, 0, :] = initial_positions
     
-    print(f"Tracking {N} points across {T} frames...")
+    print(f"Tracking {N} points across {T} frames (Vectorized)...")
+    
+    # --- Vectorized Tracking Loop ---
+    # We maintain floating point positions for all N points
+    current_y = initial_positions[:, 0]
+    current_x = initial_positions[:, 1]
+    
+    # Pre-calculate bounds for clipping
+    H_max, W_max = H - 1.001, W - 1.001
     
     for t in tqdm(range(T), desc="Computing trajectories"):
-        current_positions = trajectories[:, t, :]
+        # 1. Clip coordinates to image definition
+        # (N,) arrays
+        y_clipped = np.clip(current_y, 0, H_max)
+        x_clipped = np.clip(current_x, 0, W_max)
         
-        # Get flow at current positions using bilinear interpolation
-        for i, (y, x) in enumerate(current_positions):
-            # Clamp to image boundaries
-            y = np.clip(y, 0, H - 1.001)
-            x = np.clip(x, 0, W - 1.001)
+        # 2. Get integer indices for bilinear interpolation
+        y0 = np.floor(y_clipped).astype(np.int64)
+        x0 = np.floor(x_clipped).astype(np.int64)
+        y1 = y0 + 1
+        x1 = x0 + 1
+        
+        # Clip indices to ensure they are within valid memory
+        y1 = np.clip(y1, 0, H - 1)
+        x1 = np.clip(x1, 0, W - 1)
+        
+        # 3. Calculate interpolation weights
+        # shape: (N,)
+        wy1 = y_clipped - y0
+        wx1 = x_clipped - x0
+        wy0 = 1.0 - wy1
+        wx0 = 1.0 - wx1
+        
+        # 4. Gather flow values using Advanced Indexing
+        # flows[t] is (H, W, 2). Accessing with [y_array, x_array] gives (N, 2)
+        flow_00 = flows[t, y0, x0]
+        flow_01 = flows[t, y0, x1]
+        flow_10 = flows[t, y1, x0]
+        flow_11 = flows[t, y1, x1]
+        
+        # 5. Compute interpolated flow
+        # We need to reshape weights to (N, 1) to broadcast against flow (N, 2)
+        wy0, wy1 = wy0[:, None], wy1[:, None]
+        wx0, wx1 = wx0[:, None], wx1[:, None]
+        
+        flow_here = (wy0 * wx0 * flow_00 +
+                     wy0 * wx1 * flow_01 +
+                     wy1 * wx0 * flow_10 +
+                     wy1 * wx1 * flow_11)
+        
+        # 6. Update positions
+        # flow is [dx, dy] usually, but check your data convention.
+        # Assuming flow is [dx, dy] based on your original code:
+        # new_x = x + flow[0], new_y = y + flow[1]
+        current_x += flow_here[:, 0]
+        current_y += flow_here[:, 1]
+        
+        # 7. Store results
+        trajectories[:, t + 1, 0] = np.clip(current_y, 0, H - 1)
+        trajectories[:, t + 1, 1] = np.clip(current_x, 0, W - 1)
             
-            # Bilinear interpolation
-            y0, x0 = int(y), int(x)
-            y1, x1 = min(y0 + 1, H - 1), min(x0 + 1, W - 1)
-            
-            wy1, wx1 = y - y0, x - x0
-            wy0, wx0 = 1 - wy1, 1 - wx1
-            
-            # Interpolate flow at this position
-            flow_here = (wy0 * wx0 * flows[t, y0, x0] +
-                        wy0 * wx1 * flows[t, y0, x1] +
-                        wy1 * wx0 * flows[t, y1, x0] +
-                        wy1 * wx1 * flows[t, y1, x1])
-            
-            # Update position: flow is [dx, dy]
-            new_x = x + flow_here[0]
-            new_y = y + flow_here[1]
-            
-            # Store new position (keep in bounds)
-            trajectories[i, t + 1, 0] = np.clip(new_y, 0, H - 1)
-            trajectories[i, t + 1, 1] = np.clip(new_x, 0, W - 1)
-    
     return trajectories, initial_positions
-
 
 def compute_trajectory_displacement(trajectories):
     """
@@ -394,7 +395,15 @@ def main():
     )
     print(f"Tracked {len(trajectories)} trajectories")
     print(f"Trajectory array shape: {trajectories.shape}")  # (N, T+1, 2)
-    
+    # Memory optimization to reduce risk of OOM
+
+    # Drop optical flow array no longer needed
+    try:
+        del flows_np
+    except NameError:
+        pass
+    gc.collect()
+
     # Compute trajectory statistics
     displacement, velocity, total_distance = compute_trajectory_displacement(trajectories)
     print(f"\nTrajectory Statistics:")
