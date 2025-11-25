@@ -38,3 +38,10 @@ python video-manipulation/preprocess/4_evaluate_candidate_modes.py \
         --input "${TRAJECTORY_DIR}" \
         --visualize \
         --save-modes
+
+python video-manipulation/preprocess/5_dominant_orientation.py \
+        --trajectory-dir "${TRAJECTORY_DIR}" \
+     
+
+
+     

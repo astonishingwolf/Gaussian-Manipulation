@@ -70,7 +70,7 @@ def compute_flow_magnitude(flows):
     return magnitude  # Shape: (T, H, W)
 
 
-def track_pixel_trajectories(flows, initial_positions=None, sample_grid=None, 
+def track_pixel_trajectories(args,flows, initial_positions=None, sample_grid=None, 
                             use_flow_magnitude=False, magnitude_threshold=0.5, max_points=1000):
     """
     Track pixel trajectories by integrating optical flow over time.
@@ -111,7 +111,7 @@ def track_pixel_trajectories(flows, initial_positions=None, sample_grid=None,
             
             print(len(y_coords), "pixels found with magnitude >", magnitude_threshold)
             # If too many points, sample based on magnitude
-            if len(y_coords) > max_points:
+            if len(y_coords) > max_points and args.allow_sampling:
                 # Sample points weighted by magnitude
                 magnitudes_at_points = magnitude[y_coords, x_coords]
                 probabilities = magnitudes_at_points / magnitudes_at_points.sum()
@@ -336,7 +336,8 @@ def main():
     parser.add_argument("--sample-grid", type=int, nargs=2, default=[10, 10], 
                        metavar=('H', 'W'), 
                        help="Grid size for sampling initial points (default: 10 10)")
-    
+    parser.add_argument("--allow-sampling", action="store_true", 
+                       help="Allow sampling of points if too many points are found")
     # Visualization options
     parser.add_argument("--visualize", action="store_true", 
                        help="Visualize trajectories and statistics")
@@ -367,9 +368,9 @@ def main():
     
     # Convert to numpy
     flows_np = flow_to_numpy(flows)
-    print(f"Flow array shape: {flows_np.shape}")  # (T, H, W, 2)
-    
-    # Print statistics
+    print(f"Flow array shape: {flows_np.shape}") 
+
+
     magnitude = compute_flow_magnitude(flows_np)
     print(f"\nFlow Statistics:")
     print(f"  Mean magnitude: {np.mean(magnitude):.4f} pixels")
@@ -384,6 +385,7 @@ def main():
         print(f"\nTracking trajectories with {args.sample_grid[0]}x{args.sample_grid[1]} grid...")
     
     trajectories, initial_positions = track_pixel_trajectories(
+        args,
         flows_np, 
         sample_grid=tuple(args.sample_grid),
         use_flow_magnitude=args.use_flow_magnitude,

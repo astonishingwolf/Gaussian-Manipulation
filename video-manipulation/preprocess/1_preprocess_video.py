@@ -119,7 +119,6 @@ def main():
     input_name = input_path.stem if input_path.is_file() else input_path.name
     output_dir = output_path / input_name
     output_dir.mkdir(parents=True, exist_ok=True)
-    breakpoint()
     flow_dir = output_dir / "flow"
     flow_dir.mkdir(parents=True, exist_ok=True)
     viz_dir = (output_dir/"vis") if args.visualize else None
