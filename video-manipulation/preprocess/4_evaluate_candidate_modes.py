@@ -16,61 +16,33 @@ def choose_modes(power_x, frequencies, power_y, peak_prominence=0.05, num_modes_
     Identifies the candidate frequency modes (local peaks) for both x and y 
     averaged power spectra by selecting the peaks with the highest power from 
     the positive frequency side only.
-
-    Args:
-        power_x (np.ndarray): The power spectral density (PSD) values for the x-axis signal. 
-                              Expected shape: (N_trajectories, N_freq_bins).
-        frequencies (np.ndarray): The full two-sided frequency array for the PSD.
-        power_y (np.ndarray): The power spectral density (PSD) values for the y-axis signal.
-        peak_prominence (float): Minimum prominence for peak detection.
-        num_modes_to_select (int): Number of modes to select based on power strength.
-                                    
-    Returns:
-        tuple: (selected_modes_dict, avg_power_x, avg_power_y)
     """
     
-    # 1. Average the power spectra across all trajectories/time windows (axis 0)
     avg_power_x = power_x.mean(axis=0)
     avg_power_y = power_y.mean(axis=0)
-
-    # 2. ISOLATE THE ONE-SIDED SPECTRUM (Non-negative Frequencies: f >= 0)
-    # This prevents detecting the redundant negative frequency peaks.
     pos_freq_mask = frequencies >= 0
     
     pos_freqs = frequencies[pos_freq_mask]
     pos_power_x = avg_power_x[pos_freq_mask]
     pos_power_y = avg_power_y[pos_freq_mask]
-    
-    
-    # --- X-Axis Mode Selection (Now using only positive frequencies) ---
-    # indices_x are now relative to the 'pos_power_x' array
     indices_x, _ = find_peaks(pos_power_x, prominence=peak_prominence)
 
     peak_powers_x = pos_power_x[indices_x]
     
-    # Sort indices by power in descending order (highest power first)
     sorted_indices_x = indices_x[np.argsort(peak_powers_x)[::-1]]
     
-    # Select top N modes
     top_indices_x = sorted_indices_x[:min(num_modes_to_select, len(sorted_indices_x))]
     
-    # Get the actual positive frequency values and their powers
     selected_modes_x = pos_freqs[top_indices_x]
     selected_powers_x = pos_power_x[top_indices_x]
     
-    
-    # --- Y-Axis Mode Selection (Now using only positive frequencies) ---
     indices_y, _ = find_peaks(pos_power_y, prominence=peak_prominence)
     
     peak_powers_y = pos_power_y[indices_y]
     
-    # Sort indices by power in descending order
     sorted_indices_y = indices_y[np.argsort(peak_powers_y)[::-1]]
     
-    # Select top N modes
     top_indices_y = sorted_indices_y[:min(num_modes_to_select, len(sorted_indices_y))]
-    
-    # Get the actual positive frequency values and their powers
     selected_modes_y = pos_freqs[top_indices_y]
     selected_powers_y = pos_power_y[top_indices_y]
     
@@ -90,9 +62,6 @@ def visualize_candidate_modes(freq_axis, avg_power_x, selected_modes_x, selected
                               output_path):
     """Plot dominant candidate frequencies over the global power spectrum."""
     
-    # --- Data Preprocessing for Plotting ---
-    # Filter for strictly positive frequencies (f > 0) to exclude the DC component (index 0) 
-    # for cleaner log-scale plotting.
     pos_mask = freq_axis > 0
     pos_freqs = freq_axis[pos_mask]
     pos_power_x = avg_power_x[pos_mask]
@@ -103,9 +72,6 @@ def visualize_candidate_modes(freq_axis, avg_power_x, selected_modes_x, selected
     # Plot X-direction power spectrum
     ax1 = axes[0]
     ax1.plot(pos_freqs, pos_power_x, 'b-', linewidth=2, label='Power Spectrum (X-direction)')
-    
-    # We must ensure the selected modes are also present in the filtered power data (pos_power_x).
-    # Since selected_modes_x now only contains positive frequencies, the scatter plot is correct.
     ax1.scatter(selected_modes_x, selected_powers_x, color='red', s=100, 
                 marker='o', zorder=5, label='Selected Modes', edgecolors='darkred', linewidths=2)
                 
@@ -121,7 +87,6 @@ def visualize_candidate_modes(freq_axis, avg_power_x, selected_modes_x, selected
     ax1.grid(True, alpha=0.3)
     ax1.legend(loc='upper right')
     
-    # Plot Y-direction power spectrum
     ax2 = axes[1]
     ax2.plot(pos_freqs, pos_power_y, 'r-', linewidth=2, label='Power Spectrum (Y-direction)')
     ax2.scatter(selected_modes_y, selected_powers_y, color='blue', s=100,
