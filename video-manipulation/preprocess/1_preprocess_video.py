@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-DATA_DIR = '/hdd_data/nakul/soham/video-data'
+DATA_DIR = './data'
 
 def load_raft_model(weights_dir="weights", raft_path=None):
     raft_path = Path(raft_path or Path.cwd() / "RAFT")
