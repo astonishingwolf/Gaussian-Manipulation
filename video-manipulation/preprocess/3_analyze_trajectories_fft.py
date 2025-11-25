@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 
 
 def load_trajectories(trajectory_file):
+
     """Load trajectory data from numpy file."""
     trajectory_file = Path(trajectory_file)
     
@@ -39,21 +40,11 @@ def load_trajectories(trajectory_file):
 
 
 def compute_trajectory_fft(trajectories, axis=1, fps=None):
+
     """
     Compute FFT of trajectories along temporal axis.
-    
-    Args:
-        trajectories: array of shape (N, T, 2) - N trajectories over T frames
-        axis: axis along which to compute FFT (default: 1 for time)
-        fps: Frames per second (if provided, frequencies will be in Hz instead of cycles/frame)
-    
-    Returns:
-        fft_x: FFT of x-coordinates (N, T) - complex array
-        fft_y: FFT of y-coordinates (N, T) - complex array
-        frequencies: Frequency bins (in cycles/frame or Hz if fps provided)
-        power_x: Power spectrum for x-motion (N, T) - real array
-        power_y: Power spectrum for y-motion (N, T) - real array
     """
+
     # Extract x and y components
     y_traj = trajectories[:, :, 0]  # Shape: (N, T)
     x_traj = trajectories[:, :, 1]  # Shape: (N, T)
@@ -78,18 +69,9 @@ def compute_trajectory_fft(trajectories, axis=1, fps=None):
 
 
 def analyze_dominant_frequencies(frequencies, power_x, power_y, top_k=5):
+    
     """
     Find dominant frequencies in the trajectory data.
-    
-    Args:
-        frequencies: Frequency bins
-        power_x: Power spectrum for x-motion (N, T)
-        power_y: Power spectrum for y-motion (N, T)
-        top_k: Number of top frequencies to return
-    
-    Returns:
-        top_frequencies: Top k dominant frequencies
-        top_powers: Corresponding power values
     """
     # Average power across all trajectories
     avg_power = np.mean(power_x + power_y, axis=0)
