@@ -1,4 +1,4 @@
-python video-manipulation/preprocess/preprocess_video.py --input ball.mp4 --output optical_flows --visualize
+python video-manipulation/preprocess/1_preprocess_video.py --input ball.mp4 --output optical_flows --visualize
 
 python video-manipulation/preprocess/2_track_trajectories.py \
         --input data/optical_flows/ball \
