@@ -41,8 +41,8 @@ python video-manipulation/preprocess/3_analyze_trajectories_fft.py \
 python video-manipulation/preprocess/4_evaluate_candidate_modes.py \
         --trajectory_dir "${TRAJECTORY_DIR}" \
 
-python video-manipulation/preprocess/5_simulation.py \
-        --trajectory-dir "${TRAJECTORY_DIR}" \
+# python video-manipulation/preprocess/5_simulation.py \
+#         --trajectory-dir "${TRAJECTORY_DIR}" \
      
 
 
