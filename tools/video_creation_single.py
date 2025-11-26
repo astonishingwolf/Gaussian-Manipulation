@@ -320,16 +320,16 @@ def export_deformed_objs(obj, output_folder, start_frame, end_frame):
         print(f"[✔] Exported frame {frame} → {filepath}")
 
 if __name__ == "__main__":
-    npz_data_folder = "/Users/tsaiiast/Downloads/Custom_video"
-    obj_output_folder = "/Users/tsaiiast/Downloads/Custom_video/meshes"
-    video_output_folder = "/Users/tsaiiast/Downloads/Custom_video/videos_single"
+    npz_data_folder = "/Users/astonishingwolf/Documents/data/npz_files"
+    obj_output_folder = "/Users/astonishingwolf/Documents/obje_files/meshes"
+    video_output_folder = "/Users/astonishingwolf/Documents/videos/videos_single"
     mode = "Single"
     
     os.makedirs(obj_output_folder, exist_ok=True)
     os.makedirs(video_output_folder, exist_ok=True)
 
     start_time = 0
-    end_time = 240
+    end_time = 1
     indices = [133]
     # len(os.listdir(data_folder))
 
