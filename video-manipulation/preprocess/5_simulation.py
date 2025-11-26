@@ -621,22 +621,15 @@ def main():
         description="Modal simulation for trajectory manipulation",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--trajectory-dir", required=True,
-                       help="Path to trajectories directory containing FFT results")
-    parser.add_argument("--video-path", default="data/00133.mp4",
-                       help="Path to video file for visualization (default: data/00133.mp4)")
-    parser.add_argument("--top-k", type=int, default=16,
-                       help="Number of top frequencies to select (default: 16)")
-    parser.add_argument("--dt", type=float, default=None,
-                       help="Time step in seconds (default: 0.1/fps)")
-    parser.add_argument("--damping-factor", type=float, default=0.03,
-                       help="Damping coefficient zeta (default: 0.03)")
-    parser.add_argument("--timesteps", type=int, default=300,
-                       help="Number of simulation timesteps (default: 300)")
-    parser.add_argument("--manipulation-strength", type=float, default=1e-4,
-                       help="Manipulation strength alpha (default: 1e-4)")
-    parser.add_argument("--n-samples", type=int, default=100,
-                       help="Number of trajectories to visualize (default: 100)")
+    
+    parser.add_argument("--trajectory-dir", required=True, help="Path to trajectories directory containing FFT results")
+    parser.add_argument("--video-path", default="data/00133.mp4", help="Path to video file for visualization (default: data/00133.mp4)")
+    parser.add_argument("--top-k", type=int, default=16, help="Number of top frequencies to select (default: 16)")
+    parser.add_argument("--dt", type=float, default=None, help="Time step in seconds (default: 0.1/fps)")
+    parser.add_argument("--damping-factor", type=float, default=0.03, help="Damping coefficient zeta (default: 0.03)")
+    parser.add_argument("--timesteps", type=int, default=300, help="Number of simulation timesteps (default: 300)")
+    parser.add_argument("--manipulation-strength", type=float, default=1e-4, help="Manipulation strength alpha (default: 1e-4)")
+    parser.add_argument("--n-samples", type=int, default=100, help="Number of trajectories to visualize (default: 100)")
     
     args = parser.parse_args()
     
@@ -661,7 +654,7 @@ def main():
     
     selected = select_top_k_frequencies(
         fft_data['fft_x'], fft_data['fft_y'], 
-        fft_data['power_x'], fft_data['power_y'], 
+        fft_data['power_x'], fft_data['power_y'], a
         fft_data['frequencies'],
         top_k=args.top_k,
         selected_modes=selected_modes
@@ -675,12 +668,14 @@ def main():
     # =========================================================================
     # 3. Build FFT Matrix and Extract Initial Positions
     # =========================================================================
+
     fft_matrix = build_fft_matrix(selected)
     initial_positions = extract_initial_positions(fft_data['trajectories'])
     
     # =========================================================================
     # 4. Initialize State and Transition Matrices
     # =========================================================================
+
     K = len(selected['frequencies'])
     state_y = initialize_state(K)
     
@@ -700,6 +695,7 @@ def main():
     # =========================================================================
     # 5. Load Video Frame and Filter Trajectories
     # =========================================================================
+
     cap = cv2.VideoCapture(args.video_path)
     ret, frame = cap.read()
     cap.release()
@@ -715,6 +711,7 @@ def main():
     print(f"  Average pixel value: {pixel_average:.2f}")
     
     # Filter bright trajectories
+
     if initial_positions is not None:
         valid_indices = filter_bright_trajectories(initial_positions, frame, pixel_average)
         n_samples = min(args.n_samples, len(valid_indices))
@@ -728,6 +725,7 @@ def main():
     # =========================================================================
     # 6. Set Up Manipulation Parameters
     # =========================================================================
+
     d = np.random.rand(2)
     d = d / np.linalg.norm(d)
     p = np.random.choice(valid_indices)
