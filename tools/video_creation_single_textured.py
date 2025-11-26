@@ -1,7 +1,3 @@
-'''
-Script for oscillating an object and revolving cam around it
-'''
-
 import numpy as np
 import bpy
 import bmesh
@@ -20,22 +16,97 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 if script_dir not in sys.path:
     sys.path.append(script_dir)
 
-# --- NEW FUNCTION: Set World Background to White ---
-def SetWhiteBackground():
-    """Sets the world background color to white."""
-    # Ensure there is a world datablock
-    if bpy.context.scene.world is None:
-        bpy.context.scene.world = bpy.data.worlds.new("World")
-    
-    world = bpy.context.scene.world
-    world.use_nodes = False # Use solid color background
-    world.color = (1.0, 1.0, 1.0) # White color (R, G, B)
-    print("[✔] Set background to white.")
-
 def SmoothenObject(obj):
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
     bpy.ops.object.shade_smooth()
+
+# === UPDATED FUNCTION: FIXED FOR BLENDER 4.2 ===
+def AddProceduralMaterial(obj):
+    """
+    Creates a generated material (Noise + Bump + Color Ramp) and assigns it.
+    Updated for Blender 4.2 Principled BSDF changes.
+    """
+    mat_name = "Procedural_Texture"
+    
+    # Check if material exists to avoid duplicates, else create it
+    if mat_name in bpy.data.materials:
+        mat = bpy.data.materials[mat_name]
+    else:
+        mat = bpy.data.materials.new(name=mat_name)
+        mat.use_nodes = True
+        
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    
+    # Clear default nodes
+    nodes.clear()
+    
+    # --- Create Nodes ---
+    
+    # Output and Shader
+    node_output = nodes.new(type='ShaderNodeOutputMaterial')
+    node_output.location = (400, 0)
+    node_bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
+    node_bsdf.location = (0, 0)
+    
+    # Set properties
+    node_bsdf.inputs['Roughness'].default_value = 0.4
+    
+    # FIX FOR BLENDER 4.2: "Specular" is now "Specular IOR Level"
+    if 'Specular IOR Level' in node_bsdf.inputs:
+        node_bsdf.inputs['Specular IOR Level'].default_value = 0.5
+    elif 'Specular' in node_bsdf.inputs:
+        node_bsdf.inputs['Specular'].default_value = 0.5
+
+    # Texture Coordinate (Use Object coords for seamless 3D texturing)
+    node_coords = nodes.new(type='ShaderNodeTexCoord')
+    node_coords.location = (-1000, 0)
+    
+    # Noise Texture
+    node_noise = nodes.new(type='ShaderNodeTexNoise')
+    node_noise.location = (-800, 0)
+    node_noise.inputs['Scale'].default_value = 8.0
+    node_noise.inputs['Detail'].default_value = 5.0
+    node_noise.inputs['Distortion'].default_value = 0.2
+    
+    # Color Ramp (Maps noise grey values to Colors)
+    node_ramp = nodes.new(type='ShaderNodeValToRGB')
+    node_ramp.location = (-500, 200)
+    # Set colors: Element 0 (Dark Blue), Element 1 (Cyan/White)
+    node_ramp.color_ramp.elements[0].position = 0.3
+    node_ramp.color_ramp.elements[0].color = (0.05, 0.05, 0.3, 1) # Dark Blue
+    node_ramp.color_ramp.elements[1].position = 0.7
+    node_ramp.color_ramp.elements[1].color = (0.2, 0.8, 1.0, 1)   # Light Cyan
+    
+    # Bump Node (for physical texture/relief)
+    node_bump = nodes.new(type='ShaderNodeBump')
+    node_bump.location = (-200, -150)
+    node_bump.inputs['Strength'].default_value = 0.3 
+
+    # --- Link Nodes ---
+    
+    # Connect Coords -> Noise
+    links.new(node_coords.outputs['Object'], node_noise.inputs['Vector'])
+    
+    # Connect Noise -> Color Ramp (Fac determines color mix)
+    links.new(node_noise.outputs['Fac'], node_ramp.inputs['Fac'])
+    
+    # Connect Color Ramp -> Base Color
+    links.new(node_ramp.outputs['Color'], node_bsdf.inputs['Base Color'])
+    
+    # Connect Noise -> Bump -> Normal (Adds physical bumps)
+    links.new(node_noise.outputs['Fac'], node_bump.inputs['Height'])
+    links.new(node_bump.outputs['Normal'], node_bsdf.inputs['Normal'])
+    
+    # Connect Shader -> Output
+    links.new(node_bsdf.outputs['BSDF'], node_output.inputs['Surface'])
+
+    # --- Assign to Object ---
+    if obj.data.materials:
+        obj.data.materials[0] = mat
+    else:
+        obj.data.materials.append(mat)
 
 def CreateObject(verts, faces):
     # === CREATE MESH OBJECT ===
@@ -53,19 +124,15 @@ def CreateObject(verts, faces):
     return mesh_object
 
 def CreateArmature(joints, bones):
-    # Create an armature datablock to store the skeleton
     armature_data = bpy.data.armatures.new("Armature")
     armature_obj = bpy.data.objects.new("ArmatureObject", armature_data)
-    bpy.context.collection.objects.link(armature_obj)  # Link armature object to scene
+    bpy.context.collection.objects.link(armature_obj)
 
-    # Switch to Edit mode to add bones to the armature
     bpy.context.view_layer.objects.active = armature_obj
     bpy.ops.object.mode_set(mode='EDIT')
 
-    # Dictionary to keep track of bones by name for parenting later
     edit_bones = armature_obj.data.edit_bones
 
-    # Bone name is based on parent index
     for i in range(len(bones)):
         parent_index = bones[i, 0]
         child_index = bones[i, 1]
@@ -73,19 +140,25 @@ def CreateArmature(joints, bones):
         bone.head = joints[parent_index]
         bone.tail = joints[child_index]
 
-    # Set parents
+    # Set bone parents
     for i in range(len(bones)):
         parent_index = bones[i, 0]
         child_index = bones[i, 1]
         bone = edit_bones.get(f"Bone_{child_index}")
         bone.parent = edit_bones.get(f"Bone_{parent_index}")
 
-    # Switch back to Object mode after bone creation is done
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    armature_obj.show_in_front = True
+    # === NEW: lock root bone so it never moves ===
+    root_bone = armature_obj.pose.bones.get("Bone_0")
+    if root_bone:
+        root_bone.lock_location = (True, True, True)
+        root_bone.lock_rotation = (True, True, True)
+        root_bone.lock_scale = (True, True, True)
 
+    armature_obj.show_in_front = True
     return armature_obj
+
 
 def ApplySkinning(obj, armature_obj, skin_weights, skin_vert_inds, skin_joint_ind, skin_shape, bones):
     # Create a vertex group for each bone (one per joint)
@@ -95,10 +168,10 @@ def ApplySkinning(obj, armature_obj, skin_weights, skin_vert_inds, skin_joint_in
     # Create a mapping for 
     # Fill in the weights for each vertex group using sparse indices
     for i in range(len(skin_weights)):
-        v_idx = int(skin_vert_inds[i])        # Vertex index
-        j_idx = int(skin_joint_ind[i])        # Joint (bone) index
+        v_idx = int(skin_vert_inds[i])         # Vertex index
+        j_idx = int(skin_joint_ind[i])         # Joint (bone) index
         children = bones[bones[:, 0] == j_idx, 1] # All children to this joint
-        weight = float(skin_weights[i])       # Weight value
+        weight = float(skin_weights[i])        # Weight value
         
         if len(children) == 0:
             obj.vertex_groups[f"Bone_{j_idx}"].add([v_idx], weight, 'REPLACE')
@@ -135,8 +208,10 @@ def ApplyVibration(armature, max_vibration_angle, vibration_time_period, total_d
 
     for frame in range(total_duration):
         bpy.context.scene.frame_set(frame)
-
+        
+        print(len(random_axes.items()))
         for bone_name, axis in random_axes.items():
+            
             bone = pose_bones[bone_name]
             
             # Compute oscillating angle
@@ -151,68 +226,88 @@ def ApplyVibration(armature, max_vibration_angle, vibration_time_period, total_d
 
             bone.keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
-    bpy.ops.object.mode_set(mode='OBJECT')    
+    bpy.ops.object.mode_set(mode='OBJECT')
 
-def OscillateCam(target_point, elevation_deg, radius, start_frame, time_period, n_oscillations):
+def OscillateCam(
+    target_point, 
+    elevation_deg, 
+    radius, 
+    start_frame, 
+    time_period, 
+    n_oscillations,
+    mode="single"  
+):
     # === Delete existing cameras ===
     for obj in bpy.data.objects:
         if obj.type == 'CAMERA':
             bpy.data.objects.remove(obj, do_unlink=True)
 
-    # === Create a new camera at origin ===
+    # === Create a new camera ===
     cam_data = bpy.data.cameras.new(name="Camera")
     cam = bpy.data.objects.new("Camera", cam_data)
     bpy.context.collection.objects.link(cam)
-    cam.location = (0.0, 0.0, 0.0)  # Backed off a bit from origin
-    cam.rotation_euler = (0.0, 0.0, 0.0)
-
-    # === Set the camera as the active scene camera ===
     bpy.context.scene.camera = cam
-    
-    # Delete existing Sun lamp (optional cleanup)
+
+    # Delete existing Sun lamps
     for obj in bpy.data.objects:
         if obj.type == 'LIGHT':
             bpy.data.objects.remove(obj, do_unlink=True)
 
-    # Create a new Sun light
+    # Create Sun light parented to camera
     light_data = bpy.data.lights.new(name="CameraSun", type='SUN')
+    light_data.energy = 5.0 # Ensure light is bright enough for color   
     light_object = bpy.data.objects.new(name="CameraSun", object_data=light_data)
     bpy.context.collection.objects.link(light_object)
-
-    # Parent Sun to Camera
     light_object.parent = cam
-    light_object.location = (0.0, 0.0, 0.0)  # Place at camera's origin
 
-    # Optional: Point the sun in the same direction as the camera (so it illuminates target)
-    light_object.rotation_euler = cam.rotation_euler.copy()
-
-    # Set energy
-    light_object.data.energy = 1.0
-    
-    if cam is None:
-        raise RuntimeError("No active camera found in scene.")
-    
+    # === Shared camera variables ===
     target = Vector(target_point)
     elevation_rad = math.radians(elevation_deg)
+
+    # ============================================================
+    # MODE 1: FIXED SINGLE VIEW
+    # ============================================================
+#    if mode == "single":
+    azimuth = math.radians(45)   # Choose any angle you prefer
+
+    x = radius * math.cos(elevation_rad) * math.cos(azimuth)
+    y = radius * math.cos(elevation_rad) * math.sin(azimuth)
+    z = radius * math.sin(elevation_rad)
+
+    cam.location = target + Vector((x, y, z))
+    direction = target - cam.location
+    cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
+
+    # Insert only one keyframe
+    cam.keyframe_insert(data_path="location", frame=start_frame)
+    cam.keyframe_insert(data_path="rotation_euler", frame=start_frame)
+
+    print("[Camera] Single fixed view activated.")
+    return cam
+
+#    # ============================================================
+#    # MODE 2: ORIGINAL OSCILLATING CAMERA
+#    # ============================================================
+#    for f in range(start_frame, start_frame + time_period + 1):
+#        t = (f - start_frame) / time_period
+
+#        azimuth = 2 * math.pi * n_oscillations * t - (math.pi / 2)
+
+#        x = radius * math.cos(elevation_rad) * math.cos(azimuth)
+#        y = radius * math.cos(elevation_rad) * math.sin(azimuth)
+#        z = radius * math.sin(elevation_rad)
+
+#        cam.location = target + Vector((x, y, z))
+#        cam.keyframe_insert(data_path="location", frame=f)
+
+#        direction = target - cam.location
+#        cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
+#        cam.keyframe_insert(data_path="rotation_euler", frame=f)
+
+#    print("[Camera] Oscillating 360° mode activated.")
     
-    for f in range(start_frame, start_frame + time_period + 1):
-        t = (f - start_frame) / time_period  # Normalized time in [0, 1]
-        
-        azimuth = 2 * math.pi * n_oscillations * t - (math.pi/2)  # uniform angular speed
-        
-        # Spherical to Cartesian
-        x = radius * math.cos(elevation_rad) * math.cos(azimuth)
-        y = radius * math.cos(elevation_rad) * math.sin(azimuth)
-        z = radius * math.sin(elevation_rad)
-        
-        cam.location = target + Vector((x, y, z))
-        cam.keyframe_insert(data_path="location", frame=f)
-        
-        # Point the camera at the target
-        direction = target - cam.location
-        rot_quat = direction.to_track_quat('-Z', 'Y')  # Blender camera looks along -Z
-        cam.rotation_euler = rot_quat.to_euler()
-        cam.keyframe_insert(data_path="rotation_euler", frame=f)
+    return cam
+
 
 def RenderVideo(save_path, start_frame, end_frame):
     # Ensure directory exists
@@ -247,9 +342,8 @@ def RenderPNGs(png_folder_path, start_frame, end_frame):
 
     # Set output format to PNG
     scene.render.image_settings.file_format = 'PNG'
-    # Use 'RGBA' for transparency, which is typical for a white background
-    scene.render.image_settings.color_mode = 'RGB' 
-    scene.render.image_settings.compression = 0       # 0 = lossless
+    scene.render.image_settings.color_mode = 'RGBA'  # Use 'RGB' if no transparency
+    scene.render.image_settings.compression = 0      # 0 = lossless
 
     # Set frame range
     scene.frame_start = start_frame
@@ -303,6 +397,7 @@ def export_deformed_objs(obj, output_folder, start_frame, end_frame):
 
         # Export to OBJ
         filepath = os.path.join(output_folder, f"{frame:04d}.obj")
+        
         bpy.ops.wm.obj_export(filepath=filepath,
                               export_selected_objects=True,
                               export_materials=False)
@@ -312,92 +407,57 @@ def export_deformed_objs(obj, output_folder, start_frame, end_frame):
 
         print(f"[✔] Exported frame {frame} → {filepath}")
 
-# --- MODIFIED: Added save_obj argument ---
-def process_object(npz_path, output_dir, save_obj=False):
-    """
-    Processes the object defined in the NPZ file, animates it, 
-    and saves output images/videos and optionally OBJ files.
-
-    Args:
-        npz_path (str): Full path to the input .npz file.
-        output_dir (str): Root directory for all generated outputs.
-        save_obj (bool, optional): If True, saves an .obj file for each frame. Defaults to False.
-    """
-    # 1. Determine the object name from the NPZ file name
-    npz_filename_base = os.path.splitext(os.path.basename(npz_path))[0]
-    
-    # 2. Define output folders based on output_dir and NPZ filename base
-    render_output_folder = os.path.join(output_dir, npz_filename_base, "render")
-    obj_output_folder = os.path.join(output_dir, npz_filename_base, "meshes")
-    
-    print(f"Processing object: {npz_filename_base}")
-    print(f"Render output path: {render_output_folder}")
-    if save_obj:
-        print(f"OBJ output path: {obj_output_folder}")
-
-    # Set the background to white
-    SetWhiteBackground()
-
-    # Load npz data for the object
-    data = np.load(npz_path, allow_pickle=True)
-    mesh = data["arr_0"].item()
-
-    # Create mesh
-    obj = CreateObject(mesh["vertices"], mesh["faces"])
-    SmoothenObject(obj)
-
-    # Create armature and apply skinning
-    armature = CreateArmature(mesh["joints"], mesh["bones"])
-    ApplySkinning(obj, 
-                  armature, 
-                  mesh["skinning_weights_value"],
-                  mesh["skinning_weights_row"],
-                  mesh["skinning_weights_col"],
-                  mesh["skinning_weights_shape"],
-                  mesh["bones"]
-                  )
-    
-    start_time = 0
-    end_time = 240
-
-    # Animate the armature
-    ApplyVibration(armature, 3, 20, end_time)
-
-    # Save obj file for each frame (controlled by save_obj)
-    if save_obj:
-        export_deformed_objs(obj, obj_output_folder, start_time, end_time)
-
-    # Animate the camera
-    OscillateCam([0.0, 0.0, 0.0], 20, 2.5, 0, end_time, 1)
-    
-    # Render the images/video
-    RenderPNGs(render_output_folder, 0, end_time)
-
-# --- MODIFIED: Update the main execution block ---
 if __name__ == "__main__":
-    # --- Example 1: Single file processing (Non-saving OBJ) ---
-    print("--- Example 1: Processing single object (save_obj=False) ---")
-    npz_path_single = "/Users/astonishingwolf/Documents/data/npz_files/00133.npz"
-    # Root directory where the new subfolder (e.g., '00100') will be created
-    output_base_dir_single = "/Users/astonishingwolf/Documents/data/videos" 
-
-    # Set save_obj=False as requested by the user
-    # Output structure will be:
-    # D:\...\outputs\00100\render\...PNGs
-    # D:\...\outputs\00100\meshes (WILL NOT BE CREATED)
-    process_object(npz_path_single, output_base_dir_single, save_obj=False)
-
-    # Clean up generated objects
-    DeleteGeneratedObjects()
+    npz_data_folder = "/Users/astonishingwolf/Documents/data/npz_files"
+    obj_output_folder = "/Users/astonishingwolf/Documents/data/obje_files/meshes"
+    video_output_folder = "/Users/astonishingwolf/Documents/data/videos/videos_single"
+    mode = "Single"
     
-    # --- Example 2: Optional: Multi-file processing (Saving OBJ) ---
-    # print("\n--- Example 2: Processing multi-files (save_obj=True) ---")
-    # npz_data_folder = r"D:\3dvislab\articulate_object_gen\data\articulate_xl\processed\npz_files"
-    # output_base_dir_multi = r"D:\3dvislab\articulate_object_gen\data\motion_clustering\outputs_multi"
+    os.makedirs(obj_output_folder, exist_ok=True)
+    os.makedirs(video_output_folder, exist_ok=True)
 
-    # # This part is commented out, but shows how to loop through files
-    # for index in range(1931, 1933): # Process two files: 1931 and 1932 (assuming they exist)
-    #     npz_path_multi = os.path.join(npz_data_folder, f"{str(index).zfill(5)}.npz")
-    #     if os.path.exists(npz_path_multi):
-    #         process_object(npz_path_multi, output_base_dir_multi, save_obj=True)
-    #         DeleteGeneratedObjects()
+    start_time = 0
+    end_time = 1
+    indices = [133]
+    # len(os.listdir(data_folder))
+
+    #(133 is lamp, 376 is spider)
+    for index in indices: # Give range of object indices to process
+        npz_path = f"{npz_data_folder}/{str(index).zfill(5)}.npz"
+        # output_video_path = os.path.join(render_video_output_folder, f"{str(index).zfill(5)}.mp4")
+
+        # Load npz data for the object
+        data = np.load(npz_path, allow_pickle=True)
+        mesh = data["arr_0"].item()
+
+        # Create mesh
+        obj = CreateObject(mesh["vertices"], mesh["faces"])
+        SmoothenObject(obj)
+        
+        # === NEW: Add Texture and Color ===
+        AddProceduralMaterial(obj)
+
+        # Create armature and apply skinning
+        armature = CreateArmature(mesh["joints"], mesh["bones"])
+        ApplySkinning(obj, 
+                    armature, 
+                    mesh["skinning_weights_value"],
+                    mesh["skinning_weights_row"],
+                    mesh["skinning_weights_col"],
+                    mesh["skinning_weights_shape"],
+                    mesh["bones"]
+                    )
+        
+        # Animate the armature
+        ApplyVibration(armature, 3, 20, end_time)
+
+        # Save obj file for each frame
+        # export_deformed_objs(obj, obj_output_folder, start_time, end_time)
+
+        # Animate the camera
+#        OscillateCam([0.0, 0.0, 0.0], 20, 2.5, 0, end_time, 1, mode=mode)
+        
+        # Render the video
+        video_output_folder = os.path.join(video_output_folder, f"{str(index).zfill(5)}")
+        RenderPNGs(video_output_folder, 0, end_time)
+        DeleteGeneratedObjects()
