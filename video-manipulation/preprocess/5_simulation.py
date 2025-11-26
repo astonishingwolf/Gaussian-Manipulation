@@ -1,13 +1,21 @@
 """
-Load FFT analysis results and use them for simulation.
+Modal Simulation for Video Manipulation
+
+This script performs frequency-domain manipulation of trajectories using FFT analysis.
+It loads pre-computed FFT results, selects dominant frequency modes, and simulates
+controlled displacements using damped harmonic oscillator dynamics.
 
 Usage:
-    python video-manipulation/preprocess/4_simulation.py \
-        --input data/optical_flows/ball/trajectories
+    python video-manipulation/preprocess/5_simulation.py \
+        --trajectory-dir data/optical_flows/ball/trajectories \
+        --top-k 16 \
+        --damping-factor 0.03
 """
 
 import argparse
 import numpy as np
+import matplotlib.pyplot as plt
+import cv2
 from pathlib import Path
 
 
@@ -288,235 +296,497 @@ def create_transition_matrices(frequencies, dt, damping_factor):
     return transition_matrices
 
 
+def initialize_state(K):
+    """
+    Initialize state vector for frequency components.
+    
+    Args:
+        K: Number of frequency modes
+    
+    Returns:
+        np.ndarray: State vector of shape (K, 2) initialized to zeros
+    """
+    state_y = np.zeros((K, 2), dtype=np.float64)
+    
+    print(f"\n{'='*60}")
+    print(f"Initialized State Vector")
+    print(f"{'='*60}")
+    print(f"  Shape: {state_y.shape} (K={K}, 2)")
+    print(f"  State components: [position, velocity]")
+    
+    return state_y
+
+
+def extract_initial_positions(trajectories):
+    """
+    Extract initial positions from trajectory data.
+    
+    Args:
+        trajectories: Trajectory array of shape (N, T, 2) or None
+    
+    Returns:
+        np.ndarray or None: Initial positions of shape (N, 2)
+    """
+    if trajectories is None:
+        print(f"\n⚠ No initial positions available")
+        return None
+    
+    initial_positions = trajectories[:, 0, :]
+    print(f"\n✓ Loaded initial positions from trajectories")
+    print(f"  Shape: {initial_positions.shape} (N={initial_positions.shape[0]}, 2)")
+    print(f"  X range: [{initial_positions[:, 0].min():.2f}, {initial_positions[:, 0].max():.2f}]")
+    print(f"  Y range: [{initial_positions[:, 1].min():.2f}, {initial_positions[:, 1].max():.2f}]")
+    
+    return initial_positions
+
+
+def filter_bright_trajectories(initial_positions, frame, pixel_threshold):
+    """
+    Filter trajectories based on pixel brightness.
+    
+    Args:
+        initial_positions: Array of positions shape (N, 2)
+        frame: Video frame (H, W, C)
+        pixel_threshold: Minimum pixel value threshold
+    
+    Returns:
+        np.ndarray: Indices of valid trajectories
+    """
+    pixel_values = []
+    for pos in initial_positions:
+        x, y = int(pos[0]), int(pos[1])
+        if 0 <= x < frame.shape[0] and 0 <= y < frame.shape[1]:
+            pixel_values.append(np.mean(frame[x, y, :]))
+        else:
+            pixel_values.append(0)
+    
+    pixel_values = np.array(pixel_values)
+    valid_indices = np.where(pixel_values > pixel_threshold)[0]
+    
+    print(f"\nFiltered trajectories by brightness:")
+    print(f"  Pixel threshold: {pixel_threshold:.2f}")
+    print(f"  Valid trajectories: {len(valid_indices)} / {len(initial_positions)}")
+    
+    return valid_indices
+
+
+def apply_manipulation(state_y, fft_matrix, frequencies, d, p, alpha):
+    """
+    Apply phase manipulation to the state vector at a specific position.
+    
+    Args:
+        state_y: Current state vector (K, 2)
+        fft_matrix: FFT matrix (N, K, 2)
+        frequencies: Selected frequencies (K,)
+        d: Direction vector (2,)
+        p: Target position index
+        alpha: Manipulation strength
+    
+    Returns:
+        np.ndarray: Updated state vector
+    """
+    # Convert state to complex representation
+    omegas = 2.0 * np.pi * frequencies
+    q = state_y[:, 0] - 1j * state_y[:, 1] / (omegas + 1e-8)
+    
+    # Calculate manipulation strength and phase
+    strength = np.abs(fft_matrix[p] @ d.reshape(2, 1)) * alpha
+    angle = -np.angle(fft_matrix[p] @ d.reshape(2, 1)) + np.pi / 2
+    
+    # Apply phase shift
+    phase_shift = np.exp(1j * angle)
+    q = strength.flatten() * phase_shift.flatten()
+    
+    # Convert back to state representation
+    state_y[:, 0] = np.real(q)
+    state_y[:, 1] = -np.imag(q) * (omegas + 1e-8)
+    
+    return state_y
+
+
+def simulate_dynamics(state_y, fft_matrix, transition_matrices, frequencies, 
+                     timesteps, manipulation_params=None):
+    """
+    Simulate trajectory dynamics over time with optional manipulation.
+    
+    Args:
+        state_y: Initial state vector (K, 2)
+        fft_matrix: FFT matrix (N, K, 2)
+        transition_matrices: Transition matrices (K, 2, 2)
+        frequencies: Selected frequencies (K,)
+        timesteps: Number of simulation steps
+        manipulation_params: Dict with 'd', 'p', 'alpha' keys for manipulation
+    
+    Returns:
+        np.ndarray: Displacement array of shape (timesteps, N, 2)
+    """
+    K = len(frequencies)
+    N = fft_matrix.shape[0]
+    omegas = 2.0 * np.pi * frequencies
+    
+    displacements = []
+    
+    for t in range(timesteps):
+        # Convert state to complex representation
+        q = state_y[:, 0] - 1j * state_y[:, 1] / (omegas + 1e-8)
+        
+        # Apply manipulation at first timestep
+        if t == 0 and manipulation_params is not None:
+            state_y = apply_manipulation(
+                state_y, fft_matrix, frequencies,
+                manipulation_params['d'],
+                manipulation_params['p'],
+                manipulation_params['alpha']
+            )
+            q = state_y[:, 0] - 1j * state_y[:, 1] / (omegas + 1e-8)
+        
+        # Compute displacement
+        displacement = np.real(fft_matrix * q[None, :, None])
+        displacement = displacement.sum(axis=1)
+        displacements.append(displacement)
+        
+        # Update state using transition matrices
+        for i in range(K):
+            state_y[i] = transition_matrices[i] @ state_y[i]
+    
+    displacements = np.array(displacements)
+    print(f"\n✓ Simulated displacements over {timesteps} timesteps")
+    print(f"  Shape: {displacements.shape}")
+    
+    return displacements
+
+
+def visualize_results(displacements, initial_positions, sample_indices, 
+                     manipulation_params, frame, output_dir):
+    """
+    Generate visualization plots for simulation results.
+    
+    Args:
+        displacements: Displacement array (T, N, 2)
+        initial_positions: Initial positions (N, 2)
+        sample_indices: Indices of sampled trajectories
+        manipulation_params: Dict with manipulation info
+        frame: Video first frame
+        output_dir: Directory to save plots
+    """
+    output_dir = Path(output_dir)
+    
+    # Add initial positions to displacements for absolute positions
+    if initial_positions is not None:
+        absolute_positions = displacements + initial_positions[None, :, :]
+    else:
+        absolute_positions = displacements
+    
+   
+    # Create a video showing per-frame displacement overlays on the first frame
+    video_path = output_dir / "displacements_overlay.mp4"
+    T = displacements.shape[0]
+    H, W = frame.shape[:2]
+    fps = 20  # visualization fps
+
+    # Prepare absolute positions
+    if initial_positions is not None:
+        abs_pos = displacements + initial_positions[None, :, :]
+    else:
+        abs_pos = displacements
+
+    writer = cv2.VideoWriter(
+        str(video_path),
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        fps,
+        (W, H)
+    )
+
+    for t in range(T):
+        fig = plt.figure(figsize=(12, 8))
+        plt.imshow(frame)
+        plt.axis("off")
+
+        # Draw displacement arrows for sampled indices
+        for i in sample_indices:
+            dx = abs_pos[t, i, 1] - initial_positions[i, 1]
+            dy = abs_pos[t, i, 0] - initial_positions[i, 0]
+            plt.arrow(
+                initial_positions[i, 1], initial_positions[i, 0],
+                dx, dy,
+                color="red", head_width=5, head_length=5, alpha=0.6, length_includes_head=True
+            )
+
+        # Draw manipulation direction
+        if manipulation_params is not None:
+            p = manipulation_params["p"]
+            d = manipulation_params["d"]
+            plt.arrow(
+                initial_positions[p, 1], initial_positions[p, 0],
+                d[1] * 50, d[0] * 50,
+                color="blue", head_width=20, head_length=20, linewidth=3, length_includes_head=True
+            )
+
+        plt.title(f"Displacements Overlay - t={t}")
+
+        fig.canvas.draw()
+        img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        img = img.reshape(fig.canvas.get_width_height()[1], fig.canvas.get_width_height()[0], 3)
+        plt.close(fig)
+
+        # Resize to match video size
+        img_resized = cv2.resize(img, (W, H))
+        writer.write(cv2.cvtColor(img_resized, cv2.COLOR_RGB2BGR))
+
+    writer.release()
+    print(f"\n✓ Saved displacement overlay video to {video_path}")
+
+    # Plot displacements on first frame
+    plt.figure(figsize=(12, 8))
+    plt.imshow(frame)
+
+    for i in sample_indices:
+        plt.arrow(initial_positions[i, 1], initial_positions[i, 0],
+                 absolute_positions[-1, i, 1] - initial_positions[i, 1],
+                 absolute_positions[-1, i, 0] - initial_positions[i, 0],
+                 color='red', head_width=5, head_length=5, alpha=0.6)
+    
+    
+    # Plot manipulation direction
+    if manipulation_params is not None:
+        p = manipulation_params['p']
+        d = manipulation_params['d']
+        plt.arrow(initial_positions[p, 1], initial_positions[p, 0],
+                 d[1]*50, d[0]*50,
+                 color='blue', head_width=20, head_length=20, linewidth=3)
+    
+    plt.title('Displacements on First Frame (Red: trajectories, Blue: manipulation direction)')
+    plt.savefig(output_dir / 'displacements_on_frame.png', dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    # Plot trajectory paths
+    plt.figure(figsize=(12, 8))
+    plt.xlim(0, frame.shape[1])
+    plt.ylim(frame.shape[0], 0)
+    
+    for i in sample_indices[:20]:  # Limit to 20 for clarity
+        plt.plot(absolute_positions[:, i, 1], absolute_positions[:, i, 0], 
+                alpha=0.7, linewidth=1)
+    
+    plt.title('Trajectory Paths over Time (Sampled Points)')
+    plt.xlabel('X Position (pixels)')
+    plt.ylabel('Y Position (pixels)')
+    plt.grid(True, alpha=0.3)
+    plt.savefig(output_dir / 'xy_displacements_sampled.png', dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"\n✓ Saved visualizations to {output_dir}/")
+
+
+def save_simulation_results(output_dir, selected, fft_matrix, state_y, 
+                           transition_matrices, initial_positions, sim_params, top_k):
+    """
+    Save all simulation outputs to disk.
+    
+    Args:
+        output_dir: Output directory path
+        selected: Selected frequency data dict
+        fft_matrix: FFT matrix
+        state_y: Initial state vector
+        transition_matrices: Transition matrices
+        initial_positions: Initial positions array
+        sim_params: Simulation parameters dict
+        top_k: Number of top modes
+    """
+    output_dir = Path(output_dir)
+    
+    np.save(output_dir / f"selected_top{top_k}_frequencies.npy", selected['frequencies'])
+    np.save(output_dir / f"selected_top{top_k}_fft_x.npy", selected['fft_x'])
+    np.save(output_dir / f"selected_top{top_k}_fft_y.npy", selected['fft_y'])
+    np.save(output_dir / f"selected_top{top_k}_fft_matrix.npy", fft_matrix)
+    np.save(output_dir / f"state_y_init.npy", state_y)
+    np.save(output_dir / f"transition_matrices.npy", transition_matrices)
+    np.save(output_dir / "simulation_params.npy", sim_params)
+    
+    if initial_positions is not None:
+        np.save(output_dir / "initial_positions.npy", initial_positions)
+    
+    print(f"\n✓ Saved simulation results to {output_dir}/")
+    print(f"  - selected_top{top_k}_frequencies.npy")
+    print(f"  - selected_top{top_k}_fft_matrix.npy  [N×K×2 matrix]")
+    print(f"  - state_y_init.npy  [K×2 initial state]")
+    print(f"  - transition_matrices.npy  [K×2×2 matrices]")
+    print(f"  - simulation_params.npy")
+    if initial_positions is not None:
+        print(f"  - initial_positions.npy  [N×2 positions]")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Load FFT results for simulation")
+    parser = argparse.ArgumentParser(
+        description="Modal simulation for trajectory manipulation",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--trajectory-dir", required=True,
                        help="Path to trajectories directory containing FFT results")
+    parser.add_argument("--video-path", default="data/00133.mp4",
+                       help="Path to video file for visualization (default: data/00133.mp4)")
     parser.add_argument("--top-k", type=int, default=16,
-                       help="Number of top frequencies to select for simulation (default: 16)")
+                       help="Number of top frequencies to select (default: 16)")
     parser.add_argument("--dt", type=float, default=None,
-                       help="Time step in seconds (default: 1/fps from FFT analysis)")
+                       help="Time step in seconds (default: 0.1/fps)")
     parser.add_argument("--damping-factor", type=float, default=0.03,
                        help="Damping coefficient zeta (default: 0.03)")
+    parser.add_argument("--timesteps", type=int, default=300,
+                       help="Number of simulation timesteps (default: 300)")
+    parser.add_argument("--manipulation-strength", type=float, default=1e-4,
+                       help="Manipulation strength alpha (default: 1e-4)")
+    parser.add_argument("--n-samples", type=int, default=100,
+                       help="Number of trajectories to visualize (default: 100)")
     
     args = parser.parse_args()
     
-    # Load FFT results
+    # =========================================================================
+    # 1. Load Data
+    # =========================================================================
     fft_data = load_fft_results(args.trajectory_dir)
-    
-    # Print summary
     print_fft_summary(fft_data)
     
-    # Access the data as numpy arrays
-    fft_x = fft_data['fft_x']  # Complex array (N, T)
-    fft_y = fft_data['fft_y']  # Complex array (N, T)
-    power_x = fft_data['power_x']  # Real array (N, T)
-    power_y = fft_data['power_y']  # Real array (N, T)
-    frequencies = fft_data['frequencies']  # Real array (T,)
-    summary = fft_data['summary']  # Dictionary
     
-    print("\n✓ FFT data loaded as numpy arrays and ready for simulation")
-    
-    # Try to load pre-selected modes
+    # =========================================================================
+    # 2. Select Frequency Modes
+    # =========================================================================
     selected_modes = load_selected_modes(args.trajectory_dir)
     
-    # Select top K frequencies
     print(f"\n{'='*60}")
     if selected_modes is not None:
-        print(f"Using Pre-Selected Modes from 4_evaluate_candidate_modes.py")
+        print("Using Pre-Selected Modes")
     else:
         print(f"Selecting Top {args.top_k} Frequencies")
     print(f"{'='*60}")
     
     selected = select_top_k_frequencies(
-        fft_x, fft_y, power_x, power_y, frequencies, 
-        top_k=args.top_k, 
+        fft_data['fft_x'], fft_data['fft_y'], 
+        fft_data['power_x'], fft_data['power_y'], 
+        fft_data['frequencies'],
+        top_k=args.top_k,
         selected_modes=selected_modes
     )
     
-    print(f"\n✓ Selected {args.top_k} dominant frequencies:")
-    print(f"  Shape of selected FFT X: {selected['fft_x'].shape}")
-    print(f"  Shape of selected FFT Y: {selected['fft_y'].shape}")
-    
-    print(f"\n🎯 Selected Frequencies (sorted by power):")
+    print(f"\n🎯 Selected Frequencies:")
     for i, (freq, power) in enumerate(zip(selected['frequencies'], selected['total_power']), 1):
         period = 1.0 / freq if freq > 0 else float('inf')
         print(f"  {i:2d}. {freq:8.4f} Hz  |  Period: {period:8.4f} sec  |  Power: {power:.2e}")
     
-    # Build N×K×2 FFT matrix
+    # =========================================================================
+    # 3. Build FFT Matrix and Extract Initial Positions
+    # =========================================================================
     fft_matrix = build_fft_matrix(selected)
+    initial_positions = extract_initial_positions(fft_data['trajectories'])
     
-    # Load initial positions from trajectories
-    trajectories = fft_data['trajectories']
-    if trajectories is not None:
-        # Get initial positions (first frame: t=0)
-        initial_positions = trajectories[:, 0, :]  # Shape: (N, 2)
-        print(f"\n✓ Loaded initial positions from trajectories")
-        print(f"  Shape: {initial_positions.shape} (N={initial_positions.shape[0]}, 2)")
-        print(f"  X range: [{initial_positions[:, 0].min():.2f}, {initial_positions[:, 0].max():.2f}]")
-        print(f"  Y range: [{initial_positions[:, 1].min():.2f}, {initial_positions[:, 1].max():.2f}]")
-    else:
-        initial_positions = None
-        print(f"\n⚠ No initial positions available")
-
-    # Initialize state vector Y with shape (K, 2)
-    # State for each frequency: [position, velocity]
-    # Set K based on loaded modes or top_k argument
-    if selected_modes is not None:
-        K = len(selected_modes['indices'])
-    else:
-        K = args.top_k
-    state_y = np.zeros((K, 2), dtype=np.float64)
-    
-    print(f"\n{'='*60}")
-    print(f"Initialized State Vector Y")
-    print(f"{'='*60}")
-    print(f"  Shape: {state_y.shape} (K={K}, 2)")
-    print(f"  State components: [position, velocity]")
+    # =========================================================================
+    # 4. Initialize State and Transition Matrices
+    # =========================================================================
+    K = len(selected['frequencies'])
+    state_y = initialize_state(K)
     
     # Determine time step
     if args.dt is None:
-        fps = summary['fps']
-        dt = 1.0 / fps
-        print(f"  Time step: {dt:.6f} seconds (from FPS={fps})")
+        fps = fft_data['summary']['fps']
+        dt = 0.1 / fps
+        print(f"\n  Time step: {dt:.6f} seconds (0.1/FPS)")
     else:
         dt = args.dt
-        print(f"  Time step: {dt:.6f} seconds (user-specified)")
+        print(f"\n  Time step: {dt:.6f} seconds (user-specified)")
     
-    # Create transition matrices for all frequencies
     transition_matrices = create_transition_matrices(
         selected['frequencies'], dt, args.damping_factor
     )
-
-    # simulate for 100 timesteps
-    displacements = []
-    timestep = 100
-    for t in range(timestep):
-
-        q = state_y[:, 0] - 1j * state_y[:, 1] / (2.0 * np.pi * selected['frequencies'] + 1e-8)
-
-        # mainpulate for direction d, position p and strength alpha
-
-        if t == 0:
-            d = np.random.randn(2)
-            alpha = 1E-26
-            p = np.random.randint(0, len(fft_matrix))
-            strength = np.abs(fft_matrix[p] @ d.reshape(2, 1)) * alpha
-            angle = -1 * np.angle(fft_matrix[p] @ d.reshape(2, 1)) + np.pi / 2
-
-            phase_shift = np.exp(1j * angle)
-            q = strength.flatten() * phase_shift.flatten()
-
-            # print("@@@@@ strength @@@@@ ", strength)
-
-            state_y[:, 0] = np.real(q)
-            state_y[:, 1] = -np.imag(q) * (2.0 * np.pi * selected['frequencies'] + 1e-8)
-
-        # =====================================================================
-
-        # displacement
-        displacement = np.real(fft_matrix * q[None, :, None])
-        displacement = displacement.sum(axis=1)  # Sum over frequencies
-        displacements.append(displacement)
-
-        for i in range(K):
-            state_y[i] = transition_matrices[i] @ state_y[i]
-
-    displacements = np.array(displacements)  # Shape: (timesteps, N, 2)
-    print(f"\n✓ Simulated displacements over {timestep} timesteps:")
-    print(f"  Shape: {displacements.shape} (timesteps={timestep}, N={fft_matrix.shape[0]}, 2)")
-
-    # add the initial positions if available
-    if initial_positions is not None:
-        displacements += initial_positions[None, :, :]
     
-    import matplotlib.pyplot as plt
-
-    # plot displacement on the videos first frame
-    import cv2
-    video_path = 'data/00133.mp4'
-    cap = cv2.VideoCapture(video_path)
+    # =========================================================================
+    # 5. Load Video Frame and Filter Trajectories
+    # =========================================================================
+    cap = cv2.VideoCapture(args.video_path)
     ret, frame = cap.read()
     cap.release()
+    
+    if not ret:
+        raise FileNotFoundError(f"Could not read video: {args.video_path}")
+    
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    plt.imshow(frame)
-    # Randomly select 100 samples
-    n_samples = min(100, len(initial_positions))
-    
-    # only select the points that has pixel value larger than average
     pixel_average = np.mean(frame)
-    print(f"Average pixel value in the frame: {pixel_average:.2f}")
+    
+    print(f"\nLoaded video frame from: {args.video_path}")
+    print(f"  Frame shape: {frame.shape}")
+    print(f"  Average pixel value: {pixel_average:.2f}")
+    
+    # Filter bright trajectories
     if initial_positions is not None:
-        pixel_values = []
-        for pos in initial_positions:
-            x, y = int(pos[0]), int(pos[1])
-            if x >= 0 and x < frame.shape[1] and y >= 0 and y < frame.shape[0]:
-                pixel_values.append(np.mean(frame[y, x, :]))
-            else:
-                pixel_values.append(0)
-        pixel_values = np.array(pixel_values)
-        avg_pixel_value = np.mean(pixel_values)
-        valid_indices = np.where(pixel_values > pixel_average)[0]
-        print(f"Number of valid initial positions above average pixel value: {len(valid_indices)}")
-        if len(valid_indices) < n_samples:
-            sample_indices = np.random.choice(valid_indices, size=len(valid_indices), replace=False)
-        else:
-            sample_indices = np.random.choice(valid_indices, size=n_samples, replace=False)
+        valid_indices = filter_bright_trajectories(initial_positions, frame, pixel_average)
+        n_samples = min(args.n_samples, len(valid_indices))
+        sample_indices = np.random.choice(valid_indices, size=n_samples, replace=False)
     else:
-        sample_indices = np.random.choice(len(initial_positions), size=n_samples, replace=False)
+        sample_indices = np.random.choice(fft_matrix.shape[0], 
+                                         size=min(args.n_samples, fft_matrix.shape[0]), 
+                                         replace=False)
+        valid_indices = sample_indices
     
-    for i in sample_indices:
-        # Swap x and y coordinates to match image display orientation
-        plt.arrow(initial_positions[i, 1], initial_positions[i, 0],
-                  displacements[-1, i, 1] - initial_positions[i, 1],
-                  displacements[-1, i, 0] - initial_positions[i, 0],
-                  color='red', head_width=5, head_length=5)
-    plt.title('Displacements on First Frame')
-    plt.savefig('displacements_on_frame.png')
-    plt.clf()
-
-    for i in sample_indices:
-        plt.plot(displacements[:, i, 0], displacements[:, i, 1], label=f'Point {i}')
-    plt.title('X-Y Displacements over Time for Sampled Points')
-    plt.xlabel('Displacement X')
-    plt.ylabel('Displacement Y')
-    plt.savefig('xy_displacements_sampled.png')
-    plt.clf()
+    # =========================================================================
+    # 6. Set Up Manipulation Parameters
+    # =========================================================================
+    d = np.random.rand(2)
+    d = d / np.linalg.norm(d)
+    p = np.random.choice(valid_indices)
     
-
+    manipulation_params = {
+        'd': d,
+        'p': p,
+        'alpha': args.manipulation_strength
+    }
     
-    # Save selected frequencies and matrix
-    output_dir = Path(args.trajectory_dir)
-    np.save(output_dir / f"selected_top{args.top_k}_frequencies.npy", selected['frequencies'])
-    np.save(output_dir / f"selected_top{args.top_k}_fft_x.npy", selected['fft_x'])
-    np.save(output_dir / f"selected_top{args.top_k}_fft_y.npy", selected['fft_y'])
-    np.save(output_dir / f"selected_top{args.top_k}_fft_matrix.npy", fft_matrix)
-    np.save(output_dir / f"state_y_init.npy", state_y)
-    np.save(output_dir / f"transition_matrices.npy", transition_matrices)
-    if initial_positions is not None:
-        np.save(output_dir / f"initial_positions.npy", initial_positions)
+    print(f"\nManipulation parameters:")
+    print(f"  Direction: [{d[0]:.4f}, {d[1]:.4f}]")
+    print(f"  Position index: {p}")
+    print(f"  Strength: {args.manipulation_strength:.2e}")
     
-    # Save simulation parameters
+    # =========================================================================
+    # 7. Run Simulation
+    # =========================================================================
+    displacements = simulate_dynamics(
+        state_y, fft_matrix, transition_matrices, 
+        selected['frequencies'], args.timesteps,
+        manipulation_params=manipulation_params
+    )
+    
+    # =========================================================================
+    # 8. Visualize Results
+    # =========================================================================
+    visualize_results(
+        displacements, initial_positions, sample_indices,
+        manipulation_params, frame, args.trajectory_dir
+    )
+    
+    # =========================================================================
+    # 9. Save Results
+    # =========================================================================
     sim_params = {
         'dt': dt,
         'damping_factor': args.damping_factor,
-        'top_k': args.top_k,
-        'fps': summary['fps']
+        'top_k': K,
+        'fps': fft_data['summary']['fps'],
+        'timesteps': args.timesteps,
+        'manipulation_strength': args.manipulation_strength
     }
-    np.save(output_dir / f"simulation_params.npy", sim_params)
     
-    print(f"\n✓ Saved selected frequencies to {output_dir}/")
-    print(f"  - selected_top{args.top_k}_frequencies.npy")
-    print(f"  - selected_top{args.top_k}_fft_x.npy")
-    print(f"  - selected_top{args.top_k}_fft_y.npy")
-    print(f"  - selected_top{args.top_k}_fft_matrix.npy  [N×K×2 matrix]")
-    print(f"  - state_y_init.npy  [K×2 initial state]")
-    print(f"  - transition_matrices.npy  [K×2×2 matrices]")
-    print(f"  - simulation_params.npy  [simulation parameters]")
-    if initial_positions is not None:
-        print(f"  - initial_positions.npy  [N×2 initial positions]")
+    save_simulation_results(
+        args.trajectory_dir, selected, fft_matrix, state_y,
+        transition_matrices, initial_positions, sim_params, K
+    )
     
-    return selected, fft_matrix, state_y, transition_matrices
+    print("\n" + "="*60)
+    print("✓ Simulation completed successfully")
+    print("="*60)
+    
+    return {
+        'selected': selected,
+        'fft_matrix': fft_matrix,
+        'displacements': displacements,
+        'manipulation_params': manipulation_params
+    }
 
 
 
