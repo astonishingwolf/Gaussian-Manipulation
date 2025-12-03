@@ -1,3 +1,6 @@
 [submodule "RAFT"]
 	path = RAFT
 	url = https://github.com/princeton-vl/RAFT.git
+[submodule "DG-Mesh"]
+	path = DG-Mesh
+	url = git@github.com:pcseanlo/DG-Mesh.git
