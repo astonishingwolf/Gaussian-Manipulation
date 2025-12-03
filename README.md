@@ -88,3 +88,35 @@ chmod +x install_raft.sh
 
 **Note:** The RAFT weights will be available at:
 - `RAFT/models/raft-things.pth` (and other models)
+
+### Step 7: Install DG-Mesh
+
+> Make sure you have `cuda 11.8` and `gcc 11` installed
+
+```
+# Install nvdiffrast
+pip install git+https://github.com/NVlabs/tiny-cuda-nn#subdirectory=bindings/torch
+pip install git+https://github.com/NVlabs/nvdiffrast/
+
+# Install pytorch3d
+export FORCE_CUDA=1
+conda install -c fvcore -c iopath -c conda-forge fvcore iopath -y
+pip install "git+https://github.com/facebookresearch/pytorch3d.git"
+# Or install with prebuilt wheel
+# pip install https://github.com/MiroPsota/torch_packages_builder/releases/download/pytorch3d-0.7.8%2B5043d15/pytorch3d-0.7.8%2B5043d15pt2.2.1cu118-cp39-cp39-linux_x86_64.whl
+
+cd DG-Mesh
+
+# Install submodules
+pip install dgmesh/submodules/diff-gaussian-rasterization
+pip install dgmesh/submodules/simple-knn
+# If direct install fails:
+# cd dgmesh/submodules/diff-gaussian-rasterization
+# pip install -e . --no-build-isolation
+# cd ../../../
+# cd dgmesh/submodules/simple-knn
+# pip install -e . --no-build-isolation
+
+# Install other dependencies
+pip install -r requirements.txt
+```
