@@ -214,7 +214,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-modes", 
         type=int, 
-        default=3, 
+        default=5, 
         help="Number of modes to select (default: 3)"
     )
     parser.add_argument(

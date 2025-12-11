@@ -387,7 +387,7 @@ def main():
     # Random direction vector (3D)
     if args.manipulation_direction is not None:
         d = np.array(args.manipulation_direction)
-        d = d / np.linalg.norm(d)  # Normalize
+        d = d / np.linalg.norm(d) 
     else:
         d = np.random.rand(3)
         d = d / np.linalg.norm(d)

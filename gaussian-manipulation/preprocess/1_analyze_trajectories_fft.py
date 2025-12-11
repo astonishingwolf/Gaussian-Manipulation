@@ -47,8 +47,8 @@ def load_trajectories(trajectory_file):
     if len(trajectories.shape) != 3 or trajectories.shape[2] != 3:
         raise ValueError(f"Expected trajectories shape (T, N, 3) or (N, T, 3), got {trajectories.shape}")
     
-    
-    trajectories = trajectories.transpose(1, 0, 2)
+    # breakpoint()
+    # trajectories = trajectories.transpose(1, 0, 2)
     print(f"  N={trajectories.shape[0]} points, T={trajectories.shape[1]} time steps")
     
     return trajectories
