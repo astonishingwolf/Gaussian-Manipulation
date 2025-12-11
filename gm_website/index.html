@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+        content="ManipulateGaussian: 3D Gaussian Manipulation from Observed Vibrations.">
+  <meta name="keywords" content="Nerfies, D-NeRF, NeRF">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ManipulateGaussian: 3D Gaussian Manipulation from Observed Vibrations</title>
+
+  <!-- Global site tag (gtag.js) - Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-PYVRSFMDRL"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+
+    function gtag() {
+      dataLayer.push(arguments);
+    }
+
+    gtag('js', new Date());
+
+    gtag('config', 'G-PYVRSFMDRL');
+  </script>
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+        rel="stylesheet">
+
+  <link rel="stylesheet" href="./static/css/bulma.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/index.css">
+  <link rel="icon" href="./static/images/favicon.svg">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+  <script src="./static/js/index.js"></script>
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="main navigation">
+  <div class="navbar-brand">
+    <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false">
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+    </a>
+  </div>
+  <div class="navbar-menu">
+    <div class="navbar-start" style="flex-grow: 1; justify-content: center;">
+      <a class="navbar-item" href="https://keunhong.com">
+      <span class="icon">
+          <i class="fas fa-home"></i>
+      </span>
+      </a>
+    </div>
+  </div>
+</nav>
+
+
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+          <h1 class="title is-1 publication-title">ManipulateGaussian: 3D Gaussian Manipulation from Observed Vibrations</h1>
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">
+              <a href="https://www.ri.cmu.edu/ri-people/chung-ting-tsai/">Chung-Ting Tsai</a><sup></sup>,</span>
+            <span class="author-block">
+              <a href="https://carrie-lin.github.io/">Guying Lin</a><sup></sup>,</span>
+            <span class="author-block">
+              <a href="https://pcseanlo.github.io/">Pang-Chi Lo</a><sup></sup>,
+            </span>
+            <span class="author-block">
+              <a href="https://scholar.google.com/citations?user=ApBwadEAAAAJ&hl=en">Soham Dasgupta</a><sup></sup>,
+            </span>
+          </div>
+
+          <div class="is-size-5 publication-authors">
+            <span class="author-block"><sup></sup>Carnegie Mellon University</span>
+          </div>
+
+          <div class="column has-text-centered">
+            <div class="publication-links">
+              <!-- PDF Link. -->
+              <span class="link-block">
+                <a href=""
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="ai ai-arxiv"></i>
+                  </span>
+                  <span>Paper</span>
+                </a>
+              </span>
+              <!-- Video Link. -->
+
+              <!-- Code Link. -->
+              <span class="link-block">
+                <a href="https://github.com/astonishingwolf/Gaussian-Manipulation"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                  </a>
+              </span>
+              <!-- Dataset Link. -->
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="hero teaser">
+  <div class="container is-max-desktop">
+    <div class="hero-body">
+      <video id="teaser" autoplay muted loop playsinline height="100%">
+        <source src="./static/videos/teaser.mp4"
+                type="video/mp4">
+      </video>
+      <h2 class="subtitle has-text-centered">
+        <span class="dnerf">ManipulateGaussian</span> turns monocular videos into interactive 3D Gaussians with physics constraints.
+      </h2>
+    </div>
+  </div>
+</section>
+
+
+<section class="hero is-light is-small">
+  <div class="item item-my-video" style="text-align: center;">
+    <video poster="" id="my-video" autoplay controls muted loop playsinline style="max-width: 100%; display: inline-block;">
+      <source src="./static/videos/output.mov" type="video/mp4">
+    </video>
+
+    <!-- centered caption -->
+    <p style="margin-top: 12px; font-size: 1.1rem; color: #555;">
+      By applying different external forces, the reconstructed 3D Gaussians exhibit diverse dynamics.
+    </p>
+  </div>
+</section>
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <!-- Abstract. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+            Understanding and manipulating the vibration modes of 3D objects is critical for advancements in computer graphics, robotics, and physics-based simulation. A fundamental challenge in precise simulation is constructing interpretable modal representations that facilitate material property estimation, structural analysis, and physically grounded animation. Inspired by recent progress in learning-based dynamic reconstruction, this work extends vibration recovery from 2D dynamic observations into 3D particle simulation. We present a framework for learning and visualizing physically plausible vibration behaviors directly from video data using off-the-shelf 3D Gaussian Splatting (3DGS) models. By leveraging optical flow, deformation modeling, and differentiable rendering, our system estimates modal bases that accurately describe the object's intrinsic structural dynamics.
+          </p>
+
+    
+        </div>
+      </div>
+    </div>
+    <!--/ Abstract. -->
+
+    <!-- Paper video. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Modules Overview</h2>
+        <div class="publication-image">
+          <img src="./static/images/modules_overview.png" 
+               alt="Modules Overview"
+               style="max-width: 100%; height: auto; border-radius: 8px;">
+        </div>
+      </div>
+    </div>
+    <!--/ Paper video. -->
+  </div>
+</section>
+
+
+<section class="section">
+
+  <div class="container is-max-desktop">
+
+    <!-- Input Section -->
+    <div class="section">
+      <div class="content has-text-centered">
+        <h2 class="title is-3">Input</h2>
+        <p>
+          We render synthetic data using our designed 3D assets and animations as the input.
+        </p>
+        <div class="media-box">
+          <video autoplay controls muted loop playsinline>
+            <source src="./static/videos/input.mov" type="video/mp4">
+          </video>
+        </div>
+      </div>
+    </div>
+  
+        <!-- FFT Analysis Section -->
+        <div class="section">
+          <div class="content has-text-centered">
+            <h2 class="title is-3">Motion Formulation</h2>
+            <p>
+              
+            </p>
+            <div class="media-box">
+              <img src="./static/images/formulation.png" 
+                   alt="">
+            </div>
+          </div>
+        </div>
+      
+  
+    <!-- FFT Analysis Section -->
+    <div class="section">
+      <div class="content has-text-centered">
+        <h2 class="title is-3">Trajectory FFT Analysis</h2>
+        <p>
+          We perform FFT analysis on the motion trajectory of each 3D Gaussian 
+          to extract its dominant frequency components.
+        </p>
+        <div class="media-box">
+          <img src="./static/images/traj_fft.png" 
+               alt="Trajectory FFT Analysis">
+        </div>
+      </div>
+    </div>
+  
+    <!-- Output Section -->
+    <div class="section">
+      <div class="content has-text-centered">
+        <h2 class="title is-3">Output</h2>
+        <p>
+          After reconstructing 3D Gaussians and estimating their physical properties,
+          we apply external forces to generate new dynamics.
+        </p>
+        <div class="media-box">
+          <video controls playsinline muted loop>
+            <source src="./static/videos/output.mov" type="video/mp4">
+          </video>
+        </div>
+      </div>
+    </div>
+  
+  </div>
+  
+  <style>
+    .media-box {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 15px;
+    }
+  
+    .media-box video,
+    .media-box img {
+      max-width: 80%;
+      max-height: 350px;
+      border-radius: 5px;
+    }
+  </style>
+    <!--/ Matting. -->
+
+
+
+<!-- Concurrent Work. -->
+<div class="columns is-centered">
+  <div class="column is-full-width">
+    <h2 class="title is-3 has-text-centered">Related Links</h2>
+
+    <div class="content has-text-centered">
+      <p>
+        Our method is inspired by the paper 
+        <i>“Visual Vibrometry: Estimating Material Properties from Small Motion in Video”</i>. <br>
+        Original work:  
+        <a href="https://ieeexplore.ieee.org/document/7728146" target="_blank">
+          https://ieeexplore.ieee.org/document/7728146
+        </a>
+      </p>
+
+      <p>
+        We also thank the authors of Dynamic Gaussian Mesh for providing their excellent open-source implementation: <br>
+        <a href="https://github.com/Isabella98Liu/DG-Mesh" target="_blank">
+          https://github.com/Isabella98Liu/DG-Mesh
+        </a>
+      </p>
+    </div>
+  </div>
+</div>
+    <!--/ Concurrent Work. -->
+
+  </div>
+</section>
+
+
+<footer class="footer">
+  <div class="container">
+    <div class="content has-text-centered">
+      <a class="icon-link"
+         href="./static/videos/nerfies_paper.pdf">
+        <i class="fas fa-file-pdf"></i>
+      </a>
+      <a class="icon-link" href="https://github.com/keunhong" class="external-link" disabled>
+        <i class="fab fa-github"></i>
+      </a>
+    </div>
+    <div class="columns is-centered">
+      <div class="column is-8">
+        <div class="content">
+          <p>
+            This website is licensed under a <a rel="license"
+                                                href="http://creativecommons.org/licenses/by-sa/4.0/">Creative
+            Commons Attribution-ShareAlike 4.0 International License</a>.
+          </p>
+          <p>
+            This means you are free to borrow the <a
+              href="https://github.com/nerfies/nerfies.github.io">source code</a> of this website,
+            we just ask that you link back to this page in the footer.
+            Please remember to remove the analytics code included in the header of the website which
+            you do not want on your website.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
