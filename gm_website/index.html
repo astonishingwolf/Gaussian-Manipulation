@@ -170,7 +170,7 @@
       <div class="column is-four-fifths">
         <h2 class="title is-3">Modules Overview</h2>
         <div class="publication-image">
-          <img src="./static/images/modules_overview.png" 
+          <img src="./static/images/pipeline.png" 
                alt="Modules Overview"
                style="max-width: 100%; height: auto; border-radius: 8px;">
         </div>
@@ -190,30 +190,61 @@
       <div class="content has-text-centered">
         <h2 class="title is-3">Input</h2>
         <p>
-          We render synthetic data using our designed 3D assets and animations as the input.
+          We render synthetic data using our designed 3D assets and animations as the input, with camera parameter and pose.
         </p>
-        <div class="media-box">
-          <video autoplay controls muted loop playsinline>
-            <source src="./static/videos/input.mov" type="video/mp4">
-          </video>
+        <div class="columns" style="margin-top: 20px;">
+          <div class="column is-one-third">
+            <video autoplay controls muted loop playsinline style="width: 100%; border-radius: 5px;">
+              <source src="./static/videos/input_girl.mp4" type="video/mp4">
+            </video>
+            <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">Girl</p>
+          </div>
+          <div class="column is-one-third">
+            <video autoplay controls muted loop playsinline style="width: 100%; border-radius: 5px;">
+              <source src="./static/videos/input_hand.mp4" type="video/mp4">
+            </video>
+            <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">Hand</p>
+          </div>
+          <div class="column is-one-third">
+            <video autoplay controls muted loop playsinline style="width: 100%; border-radius: 5px;">
+              <source src="./static/videos/input_lamp.mp4" type="video/mp4">
+            </video>
+            <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">Lamp</p>
+          </div>
         </div>
       </div>
     </div>
-  
-        <!-- FFT Analysis Section -->
-        <div class="section">
-          <div class="content has-text-centered">
-            <h2 class="title is-3">Motion Formulation</h2>
-            <p>
-              
-            </p>
-            <div class="media-box">
-              <img src="./static/images/formulation.png" 
-                   alt="">
-            </div>
-          </div>
+
+    <!-- Reconstructed Section -->
+    <div class="section">
+      <div class="content has-text-centered">
+        <h2 class="title is-3">Reconstructed dynamic 3D Gaussians</h2>
+        <p>
+          With DG-Mesh we reconstruct the 3D Gaussians from the input videos, with cananical gaussian and their movements. The following visualization shows mesh image, mesh, point cloud.
+        </p>
+        
+        <div style="margin-top: 30px; margin-bottom: 20px;">
+          <video controls muted loop playsinline style="width: 100%; max-width: 800px; border-radius: 5px;">
+            <source src="./static/videos/rec_girl.mp4" type="video/mp4">
+          </video>
+          <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">Girl</p>
         </div>
-      
+
+        <div style="margin-top: 30px; margin-bottom: 20px;">
+          <video controls muted loop playsinline style="width: 100%; max-width: 800px; border-radius: 5px;">
+            <source src="./static/videos/rec_hand.mp4" type="video/mp4">
+          </video>
+          <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">Hand</p>
+        </div>
+
+        <div style="margin-top: 30px; margin-bottom: 20px;">
+          <video controls muted loop playsinline style="width: 100%; max-width: 800px; border-radius: 5px;">
+            <source src="./static/videos/rec_lamp.mp4" type="video/mp4">
+          </video>
+          <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">Lamp</p>
+        </div>
+      </div>
+    </div>      
   
     <!-- FFT Analysis Section -->
     <div class="section">
@@ -230,6 +261,21 @@
       </div>
     </div>
   
+
+    <!-- FFT Analysis Section -->
+    <div class="section">
+      <div class="content has-text-centered">
+        <h2 class="title is-3">Physics Simulation with Motion Formulation</h2>
+        <p>
+            Each frequency modality is simulated with a position and speed, and the complex number represents the phase of the harmonic motion.
+        </p>
+        <div class="media-box">
+          <img src="./static/images/formulation.png" 
+                alt="">
+        </div>
+      </div>
+    </div>
+
     <!-- Output Section -->
     <div class="section">
       <div class="content has-text-centered">
@@ -238,10 +284,26 @@
           After reconstructing 3D Gaussians and estimating their physical properties,
           we apply external forces to generate new dynamics.
         </p>
-        <div class="media-box">
-          <video controls playsinline muted loop>
-            <source src="./static/videos/output.mov" type="video/mp4">
+        
+        <div style="margin-top: 30px; margin-bottom: 20px;">
+          <video controls muted loop playsinline style="width: 100%; max-width: 800px; border-radius: 5px;">
+            <source src="./static/videos/output_girl.mp4" type="video/mp4">
           </video>
+          <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">Girl - Manipulated Dynamics</p>
+        </div>
+
+        <div style="margin-top: 30px; margin-bottom: 20px;">
+          <video controls muted loop playsinline style="width: 100%; max-width: 800px; border-radius: 5px;">
+            <source src="./static/videos/output_hand.mp4" type="video/mp4">
+          </video>
+          <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">Hand - Manipulated Dynamics</p>
+        </div>
+
+        <div style="margin-top: 30px; margin-bottom: 20px;">
+          <video controls muted loop playsinline style="width: 100%; max-width: 800px; border-radius: 5px;">
+            <source src="./static/videos/output_lamp.mp4" type="video/mp4">
+          </video>
+          <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">Lamp - Manipulated Dynamics</p>
         </div>
       </div>
     </div>
