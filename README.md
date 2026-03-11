@@ -1,5 +1,9 @@
 # Gaussian-Manipulation
 
+## Preprint
+
+Preprint: [Paper](https://drive.google.com/file/d/1KIzwig3TziGIl2oFJuDBvDhG634U5b1w/view)
+
 ## Installation
 
 This installation guide is based on the DMesh repository (https://github.com/SonSang/dmesh). Please ensure you have Python 3.9 and recommend using Anaconda to manage the environment.
